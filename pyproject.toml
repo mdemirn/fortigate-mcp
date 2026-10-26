@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fortigate-mcp-server"
-version = "1.0.0"
+version = "1.1.0"
 description = "FortiGate MCP Server - FastMCP based FortiGate management server"
 readme = "README.md"
 license = {text = "MIT"}
@@ -45,7 +45,6 @@ dev = [
     "flake8>=6.0.0",
     "mypy>=1.0.0",
     "bandit>=1.7.0",
-    "safety>=2.0.0",
     "respx>=0.23.1",
 ]
 test = [
@@ -64,14 +63,14 @@ lint = [
 ]
 security = [
     "bandit>=1.7.0",
-    "safety>=2.0.0",
+    "pip-audit>=2.7.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/alpadalar/fortigate-mcp-server"
-Documentation = "https://github.com/alpadalar/fortigate-mcp-server#readme"
-Repository = "https://github.com/alpadalar/fortigate-mcp-server"
-"Bug Tracker" = "https://github.com/alpadalar/fortigate-mcp-server/issues"
+Homepage = "https://github.com/mdemirn/fortigate-mcp"
+Documentation = "https://github.com/mdemirn/fortigate-mcp#readme"
+Repository = "https://github.com/mdemirn/fortigate-mcp"
+"Bug Tracker" = "https://github.com/mdemirn/fortigate-mcp/issues"
 
 [project.scripts]
 fortigate-mcp-server = "src.fortigate_mcp.server:server_main"

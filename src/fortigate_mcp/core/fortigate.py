@@ -14,8 +14,12 @@ import httpx
 import json
 from pydantic import SecretStr
 from ..config.models import FortiGateDeviceConfig, AuthConfig
+from urllib.parse import quote
+
 from ..validation import (
     scrub_secrets,
+    validate_api_key,
+    validate_api_path,
     validate_interface_name,
     validate_numeric_id,
     validate_object_name,
@@ -102,7 +106,8 @@ class FortiGateAPI:
         endpoint: str,
         params: Optional[Dict] = None,
         data: Optional[Dict] = None,
-        vdom: Optional[str] = None
+        vdom: Optional[str] = None,
+        raw_text: bool = False,
     ) -> Dict[str, Any]:
         """Make HTTP request to FortiGate API.
         
@@ -112,6 +117,9 @@ class FortiGateAPI:
             params: Query parameters
             data: Request body data
             vdom: Virtual Domain (uses device default if not specified)
+            raw_text: when True, do not parse the body as JSON -- return
+                ``{"text": <body>, "status_code": <code>}`` instead. Used for
+                endpoints that answer with a non-JSON payload (config backup).
             
         Returns:
             API response as dictionary
@@ -177,6 +185,9 @@ class FortiGateAPI:
                         device_id=self.device_id
                     )
                 
+                if raw_text:
+                    return {"text": response.text, "status_code": response.status_code}
+
                 # Parse response
                 try:
                     return cast(Dict[str, Any], response.json())
@@ -395,6 +406,221 @@ class FortiGateAPI:
         """Get detailed information for a specific virtual IP."""
         endpoint = self._validated_endpoint("cmdb/firewall/vip", vip_name, "vip_name")
         return self._make_request("GET", endpoint, vdom=vdom)
+
+    # Address group endpoints
+    def get_address_groups(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get address groups (cmdb/firewall/addrgrp)."""
+        return self._make_request("GET", "cmdb/firewall/addrgrp", vdom=vdom)
+
+    def create_address_group(self, group_data: Dict[str, Any], vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Create a new address group."""
+        return self._make_request("POST", "cmdb/firewall/addrgrp", data=group_data, vdom=vdom)
+
+    def update_address_group(self, group_name: str, group_data: Dict[str, Any], vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Update an existing address group (e.g. replace its member list)."""
+        endpoint = self._validated_endpoint("cmdb/firewall/addrgrp", group_name, "group_name")
+        return self._make_request("PUT", endpoint, data=group_data, vdom=vdom)
+
+    def delete_address_group(self, group_name: str, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Delete an address group."""
+        endpoint = self._validated_endpoint("cmdb/firewall/addrgrp", group_name, "group_name")
+        return self._make_request("DELETE", endpoint, vdom=vdom)
+
+    def get_service_groups(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get service groups (cmdb/firewall.service/group)."""
+        return self._make_request("GET", "cmdb/firewall.service/group", vdom=vdom)
+
+    # Firewall policy ordering
+    def move_firewall_policy(self, policy_id: str, position: str, reference_id: str,
+                             vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Move a policy before/after another policy in the evaluation order.
+
+        FortiOS exposes reordering as ``PUT cmdb/firewall/policy/{id}?action=move&before=<ref>``
+        (or ``after=<ref>``); both IDs are validated before path/query interpolation.
+        """
+        if position not in ("before", "after"):
+            raise ValueError("position must be 'before' or 'after'")
+        endpoint = self._validated_endpoint("cmdb/firewall/policy", policy_id, "policy_id", numeric=True)
+        safe_ref = validate_numeric_id(reference_id, "reference_id")
+        return self._make_request("PUT", endpoint, params={"action": "move", position: safe_ref}, vdom=vdom)
+
+    # DHCP endpoints
+    def get_dhcp_servers(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get DHCP server configuration, including reserved addresses (cmdb/system.dhcp/server)."""
+        return self._make_request("GET", "cmdb/system.dhcp/server", vdom=vdom)
+
+    def get_dhcp_leases(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get active DHCP leases (monitor/system/dhcp)."""
+        return self._make_request("GET", "monitor/system/dhcp", vdom=vdom)
+
+    def create_dhcp_reservation(self, server_id: str, reservation_data: Dict[str, Any],
+                                vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Add a reserved-address entry to a DHCP server (child table POST)."""
+        endpoint = self._validated_endpoint("cmdb/system.dhcp/server", server_id, "dhcp_server_id", numeric=True)
+        return self._make_request("POST", f"{endpoint}/reserved-address", data=reservation_data, vdom=vdom)
+
+    def delete_dhcp_reservation(self, server_id: str, reservation_id: str,
+                                vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Delete a reserved-address entry from a DHCP server."""
+        endpoint = self._validated_endpoint("cmdb/system.dhcp/server", server_id, "dhcp_server_id", numeric=True)
+        safe_res = validate_numeric_id(reservation_id, "reservation_id")
+        return self._make_request("DELETE", f"{endpoint}/reserved-address/{safe_res}", vdom=vdom)
+
+    # Security profile endpoints (read-only)
+    SECURITY_PROFILE_ENDPOINTS = {
+        "application": "cmdb/application/list",
+        "webfilter": "cmdb/webfilter/profile",
+        "antivirus": "cmdb/antivirus/profile",
+        "ips": "cmdb/ips/sensor",
+        "dnsfilter": "cmdb/dnsfilter/profile",
+        "ssl-ssh": "cmdb/firewall/ssl-ssh-profile",
+        "dlp": "cmdb/dlp/profile",
+        "emailfilter": "cmdb/emailfilter/profile",
+        "file-filter": "cmdb/file-filter/profile",
+        "icap": "cmdb/icap/profile",
+        "ssh-filter": "cmdb/ssh-filter/profile",
+        "waf": "cmdb/waf/profile",
+        "voip": "cmdb/voip/profile",
+        "virtual-patch": "cmdb/virtual-patch/profile",
+    }
+
+    def _security_profile_endpoint(self, profile_type: str) -> str:
+        endpoint = self.SECURITY_PROFILE_ENDPOINTS.get(profile_type)
+        if endpoint is None:
+            raise ValueError(
+                "profile_type must be one of: " + ", ".join(sorted(self.SECURITY_PROFILE_ENDPOINTS))
+            )
+        return endpoint
+
+    def get_security_profiles(self, profile_type: str, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """List security profiles of one type (application, webfilter, antivirus, ips, dnsfilter, ssl-ssh)."""
+        return self._make_request("GET", self._security_profile_endpoint(profile_type), vdom=vdom)
+
+    def get_security_profile(self, profile_type: str, name: str, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get one security profile by name."""
+        endpoint = self._validated_endpoint(self._security_profile_endpoint(profile_type), name, "profile_name")
+        return self._make_request("GET", endpoint, vdom=vdom)
+
+    def get_application_names(self, app_ids: List[int], vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Resolve FortiGuard application signature IDs to names (cmdb/application/name)."""
+        safe_ids = sorted({int(i) for i in app_ids})
+        if not safe_ids:
+            return {"results": []}
+        filters = [f"id=={i}" for i in safe_ids]
+        return self._make_request(
+            "GET", "cmdb/application/name",
+            params={"filter": ",".join(filters), "format": "id|name|category"}, vdom=vdom,
+        )
+
+    # VPN monitor endpoints
+    def get_ipsec_tunnels(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get IPsec tunnel status (monitor/vpn/ipsec)."""
+        return self._make_request("GET", "monitor/vpn/ipsec", vdom=vdom)
+
+    def get_ssl_vpn_sessions(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get SSL-VPN sessions (monitor/vpn/ssl)."""
+        return self._make_request("GET", "monitor/vpn/ssl", vdom=vdom)
+
+    # User / identity endpoints
+    def get_local_users(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get local user accounts (cmdb/user/local)."""
+        return self._make_request("GET", "cmdb/user/local", vdom=vdom)
+
+    def get_user_groups(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get user groups (cmdb/user/group)."""
+        return self._make_request("GET", "cmdb/user/group", vdom=vdom)
+
+    def get_firewall_auth_users(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get authenticated firewall users (monitor/user/firewall)."""
+        return self._make_request("GET", "monitor/user/firewall", vdom=vdom)
+
+    # System monitor endpoints
+    def get_resource_usage(self, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get CPU/memory/session usage (monitor/system/resource/usage)."""
+        return self._make_request("GET", "monitor/system/resource/usage", vdom=vdom)
+
+    def get_sessions(self, filters: Optional[List[str]] = None, count: int = 50,
+                     vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get active sessions from the session table (monitor/firewall/sessions).
+
+        FortiOS ignores bare ``srcaddr=``/``dstaddr=`` query parameters on this
+        endpoint; filtering only works through its ``filter=key==value``
+        expressions (verified live on FortiOS 8.0), so ``filters`` is a list of
+        such expressions, e.g. ``["srcaddr==192.0.2.40", "dstport==445"]``.
+        """
+        params: Dict[str, Any] = {"ip_version": "ipv4", "count": int(count)}
+        if filters:
+            params["filter"] = list(filters)
+        return self._make_request("GET", "monitor/firewall/sessions", params=params, vdom=vdom)
+
+    def get_traffic_logs(self, source: str = "memory", rows: int = 50,
+                         filters: Optional[List[str]] = None, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Get forward traffic logs (log/{memory|disk}/traffic/forward)."""
+        if source not in ("memory", "disk"):
+            raise ValueError("source must be 'memory' or 'disk'")
+        params: Dict[str, Any] = {"rows": int(rows)}
+        if filters:
+            params["filter"] = list(filters)
+        return self._make_request("GET", f"log/{source}/traffic/forward", params=params, vdom=vdom)
+
+    def backup_config(self, scope: str = "global", vdom: Optional[str] = None) -> Dict[str, Any]:
+        """Download the running configuration as text (POST monitor/system/config/backup)."""
+        if scope not in ("global", "vdom"):
+            raise ValueError("scope must be 'global' or 'vdom'")
+        return self._make_request(
+            "POST", "monitor/system/config/backup", data={"scope": scope}, vdom=vdom, raw_text=True
+        )
+
+    # ------------------------------------------------------------------
+    # Generic pass-through (any cmdb / monitor / log endpoint)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _generic_endpoint(section: str, path: str, key: Optional[str] = None) -> str:
+        safe_path = validate_api_path(path)
+        if key is None:
+            return f"{section}/{safe_path}"
+        safe_key = quote(validate_api_key(key), safe="")
+        return f"{section}/{safe_path}/{safe_key}"
+
+    def cmdb_list(self, path: str, params: Optional[Dict[str, Any]] = None,
+                  vdom: Optional[str] = None) -> Dict[str, Any]:
+        """GET cmdb/{path} with optional filter/start/count/format params."""
+        return self._make_request("GET", self._generic_endpoint("cmdb", path), params=params, vdom=vdom)
+
+    def cmdb_get(self, path: str, key: str, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """GET cmdb/{path}/{key}."""
+        return self._make_request("GET", self._generic_endpoint("cmdb", path, key), vdom=vdom)
+
+    def cmdb_create(self, path: str, data: Dict[str, Any], vdom: Optional[str] = None) -> Dict[str, Any]:
+        """POST cmdb/{path}."""
+        return self._make_request("POST", self._generic_endpoint("cmdb", path), data=data, vdom=vdom)
+
+    def cmdb_update(self, path: str, key: str, data: Dict[str, Any], vdom: Optional[str] = None) -> Dict[str, Any]:
+        """PUT cmdb/{path}/{key}."""
+        return self._make_request("PUT", self._generic_endpoint("cmdb", path, key), data=data, vdom=vdom)
+
+    def cmdb_delete(self, path: str, key: str, vdom: Optional[str] = None) -> Dict[str, Any]:
+        """DELETE cmdb/{path}/{key}."""
+        return self._make_request("DELETE", self._generic_endpoint("cmdb", path, key), vdom=vdom)
+
+    def monitor_get(self, path: str, params: Optional[Dict[str, Any]] = None,
+                    vdom: Optional[str] = None) -> Dict[str, Any]:
+        """GET monitor/{path}."""
+        return self._make_request("GET", self._generic_endpoint("monitor", path), params=params, vdom=vdom)
+
+    def monitor_post(self, path: str, data: Optional[Dict[str, Any]] = None,
+                     vdom: Optional[str] = None) -> Dict[str, Any]:
+        """POST monitor/{path} (actions such as tunnel up/down, session close)."""
+        return self._make_request("POST", self._generic_endpoint("monitor", path), data=data or {}, vdom=vdom)
+
+    def log_get(self, path: str, rows: int = 50, filters: Optional[List[str]] = None,
+                vdom: Optional[str] = None) -> Dict[str, Any]:
+        """GET log/{path} (e.g. memory/event/system) with rows + filter expressions."""
+        params: Dict[str, Any] = {"rows": int(rows)}
+        if filters:
+            params["filter"] = list(filters)
+        return self._make_request("GET", self._generic_endpoint("log", path), params=params, vdom=vdom)
 
 
 class FortiGateManager:

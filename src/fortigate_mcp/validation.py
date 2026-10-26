@@ -33,7 +33,7 @@ Error contract:
 
 import ipaddress
 import re
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 # RFC-1123-style hostname: dot-separated labels, each 1-63 chars of
 # [A-Za-z0-9-], no leading/trailing hyphen per label, 253-char overall cap.
@@ -252,3 +252,82 @@ def scrub_secrets(text: str, secrets: Iterable[Optional[str]]) -> str:
         text = text.replace(secret, "***REDACTED***")
 
     return _BEARER_RE.sub("Bearer ***REDACTED***", text)
+
+
+# Generic pass-through grammar: a FortiOS REST path like "firewall/policy",
+# "vpn.ipsec/phase1-interface" or "system.dhcp/server" -- dot-separated
+# sections joined by single slashes ("+" allowed for user/tacacs+). No leading/trailing slash, no "..",
+# no query/fragment characters, bounded length.
+_API_PATH_RE = re.compile(r"[A-Za-z0-9_.+-]{1,64}(/[A-Za-z0-9_.+-]{1,64}){0,5}")  # "+" for user/tacacs+
+
+# Object keys for generic CMDB access: FortiOS allows spaces, dots and a few
+# punctuation characters in object names (e.g. "G Suite", "port1.100"), so
+# this is deliberately wider than validate_object_name. The key is always
+# percent-encoded by the caller before it becomes a path segment.
+_API_KEY_RE = re.compile(r"[A-Za-z0-9_.:@+()\[\] -]{1,128}")
+
+# Configuration keys whose values must never reach an MCP client verbatim.
+_SENSITIVE_KEY_RE = re.compile(
+    r"(passw|secret|psk|passphrase|private[-_]?key|api[-_]?key|token|"
+    r"shared[-_]?key|community|auth[-_]?pwd|priv[-_]?pwd|wpa|preshared)",
+    re.IGNORECASE,
+)
+REDACTED_VALUE = "***REDACTED***"
+
+
+def validate_api_path(path: str, field_name: str = "path") -> str:
+    """Validate a FortiOS REST resource path for the generic pass-through tools.
+
+    Accepts e.g. ``firewall/policy``, ``vpn.ipsec/phase1-interface`` or
+    ``system/status``; rejects traversal, query strings, whitespace and
+    leading/trailing slashes by construction.
+
+    Raises:
+        ValueError: if the path is not a string or does not fullmatch the grammar.
+    """
+    if not isinstance(path, str):
+        raise ValueError(f"{field_name} must be a string")
+    if ".." in path or not _API_PATH_RE.fullmatch(path):
+        raise ValueError(
+            f"{field_name} is not a valid FortiOS API path "
+            "(expected e.g. 'firewall/policy' or 'vpn.ipsec/phase1-interface')"
+        )
+    return path
+
+
+def validate_api_key(key: str, field_name: str = "key") -> str:
+    """Validate an object key for the generic pass-through tools (wider charset
+    than validate_object_name; caller must percent-encode it).
+
+    Raises:
+        ValueError: if the key is not a string or does not fullmatch the grammar.
+    """
+    if not isinstance(key, str):
+        raise ValueError(f"{field_name} must be a string")
+    if ".." in key or not _API_KEY_RE.fullmatch(key):
+        raise ValueError(
+            f"{field_name} is not a valid object key "
+            "(letters, digits, space, '_.:@+()[]-'; 1-128 chars)"
+        )
+    return key
+
+
+def redact_sensitive_fields(obj: Any) -> Any:
+    """Return a deep copy of ``obj`` with values of secret-looking keys replaced.
+
+    FortiOS returns stored secrets as ``ENC ...`` blobs or masked strings, but
+    PSKs, passphrases, SNMP communities and admin passwords must still never be
+    echoed to an MCP client. Non-empty values under a sensitive key become
+    ``***REDACTED***``; empty values are left as-is so "not set" stays visible.
+    """
+    if isinstance(obj, dict):
+        out = {}
+        for key, value in obj.items():
+            if isinstance(key, str) and _SENSITIVE_KEY_RE.search(key) and value not in ("", None, [], {}):
+                out[key] = REDACTED_VALUE
+            else:
+                out[key] = redact_sensitive_fields(value)
+        return out
+    if isinstance(obj, list):
+        return [redact_sensitive_fields(item) for item in obj]
+    return obj

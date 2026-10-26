@@ -63,7 +63,52 @@ from .tools.definitions import (
     GET_INTERFACE_STATUS_DESC,
     HEALTH_CHECK_DESC,
     GET_SERVER_INFO_DESC,
+    LIST_ADDRESS_GROUPS_DESC,
+    GET_ADDRESS_GROUP_DETAIL_DESC,
+    CREATE_ADDRESS_GROUP_DESC,
+    ADD_ADDRESS_GROUP_MEMBERS_DESC,
+    REMOVE_ADDRESS_GROUP_MEMBERS_DESC,
+    DELETE_ADDRESS_GROUP_DESC,
+    UPDATE_ADDRESS_OBJECT_DESC,
+    DELETE_ADDRESS_OBJECT_DESC,
+    UPDATE_SERVICE_OBJECT_DESC,
+    DELETE_SERVICE_OBJECT_DESC,
+    LIST_SERVICE_GROUPS_DESC,
+    MOVE_FIREWALL_POLICY_DESC,
+    LIST_DHCP_SERVERS_DESC,
+    LIST_DHCP_LEASES_DESC,
+    CREATE_DHCP_RESERVATION_DESC,
+    DELETE_DHCP_RESERVATION_DESC,
+    LIST_SECURITY_PROFILES_DESC,
+    GET_SECURITY_PROFILE_DETAIL_DESC,
+    LIST_IPSEC_TUNNELS_DESC,
+    LIST_SSL_VPN_SESSIONS_DESC,
+    LIST_LOCAL_USERS_DESC,
+    LIST_USER_GROUPS_DESC,
+    LIST_FIREWALL_AUTH_SESSIONS_DESC,
+    GET_SYSTEM_RESOURCES_DESC,
+    LIST_ACTIVE_SESSIONS_DESC,
+    QUERY_TRAFFIC_LOG_DESC,
+    BACKUP_CONFIG_DESC,
+    CMDB_LIST_DESC,
+    CMDB_GET_DESC,
+    CREATE_CMDB_OBJECT_DESC,
+    UPDATE_CMDB_OBJECT_DESC,
+    DELETE_CMDB_OBJECT_DESC,
+    MONITOR_GET_DESC,
+    EXECUTE_MONITOR_ACTION_DESC,
+    LOG_GET_DESC,
+    LOOKUP_POLICY_DESC,
+    LOOKUP_ROUTE_DESC,
+    EXECUTE_IPSEC_TUNNEL_ACTION_DESC,
+    GET_FORTIVIEW_TOP_DESC,
+    PING_FROM_DEVICE_DESC,
+    GEOIP_LOOKUP_DESC,
+    QUERY_EVENT_LOG_DESC,
+    QUERY_UTM_LOG_DESC,
+    GET_LOG_SETTINGS_DESC,
 )
+from .tools.catalog import CATALOG
 
 
 RISK_CLASSIFICATION = {
@@ -88,7 +133,35 @@ RISK_CLASSIFICATION = {
     "test_connection": "read",
     "health": "read",
     "get_schema_info": "read",
-    # write -- create_*/update_*/add_device
+    "list_address_groups": "read",
+    "get_address_group_detail": "read",
+    "list_service_groups": "read",
+    "list_dhcp_servers": "read",
+    "list_dhcp_leases": "read",
+    "list_security_profiles": "read",
+    "get_security_profile_detail": "read",
+    "list_ipsec_tunnels": "read",
+    "list_ssl_vpn_sessions": "read",
+    "list_local_users": "read",
+    "list_user_groups": "read",
+    "list_firewall_auth_sessions": "read",
+    "get_system_resources": "read",
+    "list_active_sessions": "read",
+    "query_traffic_log": "read",
+    "backup_config": "read",
+    "cmdb_list": "read",
+    "cmdb_get": "read",
+    "monitor_get": "read",
+    "log_get": "read",
+    "lookup_policy": "read",
+    "lookup_route": "read",
+    "get_fortiview_top": "read",
+    "ping_from_device": "read",
+    "geoip_lookup": "read",
+    "query_event_log": "read",
+    "query_utm_log": "read",
+    "get_log_settings": "read",
+    # write -- create_*/update_*/add_*/move_*
     "add_device": "write",
     "create_firewall_policy": "write",
     "update_firewall_policy": "write",
@@ -98,17 +171,35 @@ RISK_CLASSIFICATION = {
     "create_static_route": "write",
     "create_virtual_ip": "write",
     "update_virtual_ip": "write",
-    # destructive -- delete_*/remove_device
+    "create_address_group": "write",
+    "add_address_group_members": "write",
+    "update_address_object": "write",
+    "update_service_object": "write",
+    "move_firewall_policy": "write",
+    "create_dhcp_reservation": "write",
+    "create_cmdb_object": "write",
+    "update_cmdb_object": "write",
+    "execute_monitor_action": "write",
+    "execute_ipsec_tunnel_action": "write",
+    # destructive -- delete_*/remove_*
     "remove_device": "destructive",
     "delete_firewall_policy": "destructive",
     "delete_static_route": "destructive",
     "delete_virtual_ip": "destructive",
+    "remove_address_group_members": "destructive",
+    "delete_address_group": "destructive",
+    "delete_address_object": "destructive",
+    "delete_service_object": "destructive",
+    "delete_dhcp_reservation": "destructive",
+    "delete_cmdb_object": "destructive",
 }
+# Every catalog entry is a parameterless GET -> read.
+RISK_CLASSIFICATION.update({entry.name: "read" for entry in CATALOG})
 """Canonical per-tool risk classification (SEC-02).
 
 Single source of truth for BOTH the dispatch-layer read-only gate (SEC-01,
 ``_tool()``'s ``_gate`` helper below) and Phase 5's SECURITY.md tool-risk
-table. Covers all 33 unique tool names registered across transports;
+table. Covers all 60 unique tool names registered across transports;
 completeness is enforced by ``tests/test_write_gate.py``. An unclassified
 name is a registration-time KeyError (see ``_gate``), not a silent gap.
 """
@@ -465,6 +556,443 @@ def register_tools(mcp: Any, tools: Any, transport: Literal["stdio", "http"]) ->
         def create_static_route(device_id: str, dst: str, gateway: str, device: Optional[str] = None, vdom: Optional[str] = None) -> List[Content]:
             return cast(List[Content], tools.routing_tools.create_static_route(device_id, dst, gateway, device, vdom))
 
+    # --- (C2) extended surface: 27 schema-identical tools on both transports
+
+    @_tool(LIST_ADDRESS_GROUPS_DESC)
+    def list_address_groups(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.list_address_groups(device_id, vdom))
+
+    @_tool(GET_ADDRESS_GROUP_DETAIL_DESC)
+    def get_address_group_detail(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        name: Annotated[str, Field(description="Address group name")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.get_address_group_detail(device_id, name, vdom))
+
+    @_tool(CREATE_ADDRESS_GROUP_DESC)
+    def create_address_group(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        name: Annotated[str, Field(description="New address group name")],
+        members: Annotated[List[str], Field(description="Existing address object names")],
+        comment: Annotated[Optional[str], Field(description="Comment", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.create_address_group(device_id, name, members, comment, vdom))
+
+    @_tool(ADD_ADDRESS_GROUP_MEMBERS_DESC)
+    def add_address_group_members(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        name: Annotated[str, Field(description="Address group name")],
+        members: Annotated[List[str], Field(description="Address object names to add")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.add_address_group_members(device_id, name, members, vdom))
+
+    @_tool(REMOVE_ADDRESS_GROUP_MEMBERS_DESC)
+    def remove_address_group_members(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        name: Annotated[str, Field(description="Address group name")],
+        members: Annotated[List[str], Field(description="Address object names to remove")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.remove_address_group_members(device_id, name, members, vdom))
+
+    @_tool(DELETE_ADDRESS_GROUP_DESC)
+    def delete_address_group(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        name: Annotated[str, Field(description="Address group name")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.delete_address_group(device_id, name, vdom))
+
+    @_tool(UPDATE_ADDRESS_OBJECT_DESC)
+    def update_address_object(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        name: Annotated[str, Field(description="Address object name")],
+        address_data: Annotated[dict, Field(description="Fields to change")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.update_address_object(device_id, name, address_data, vdom))
+
+    @_tool(DELETE_ADDRESS_OBJECT_DESC)
+    def delete_address_object(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        name: Annotated[str, Field(description="Address object name")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.delete_address_object(device_id, name, vdom))
+
+    @_tool(UPDATE_SERVICE_OBJECT_DESC)
+    def update_service_object(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        name: Annotated[str, Field(description="Service object name")],
+        service_data: Annotated[dict, Field(description="Fields to change")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.update_service_object(device_id, name, service_data, vdom))
+
+    @_tool(DELETE_SERVICE_OBJECT_DESC)
+    def delete_service_object(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        name: Annotated[str, Field(description="Service object name")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.delete_service_object(device_id, name, vdom))
+
+    @_tool(LIST_SERVICE_GROUPS_DESC)
+    def list_service_groups(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.network_tools.list_service_groups(device_id, vdom))
+
+    @_tool(MOVE_FIREWALL_POLICY_DESC)
+    def move_firewall_policy(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        policy_id: Annotated[str, Field(description="Policy ID to move")],
+        position: Annotated[Literal["before", "after"], Field(description="Place the policy before or after reference_id")],
+        reference_id: Annotated[str, Field(description="Policy ID to position relative to")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.firewall_tools.move_policy(device_id, policy_id, position, reference_id, vdom))
+
+    @_tool(LIST_DHCP_SERVERS_DESC)
+    def list_dhcp_servers(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.dhcp_tools.list_dhcp_servers(device_id, vdom))
+
+    @_tool(LIST_DHCP_LEASES_DESC)
+    def list_dhcp_leases(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        interface: Annotated[Optional[str], Field(description="Filter by interface name", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.dhcp_tools.list_dhcp_leases(device_id, interface, vdom))
+
+    @_tool(CREATE_DHCP_RESERVATION_DESC)
+    def create_dhcp_reservation(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        ip: Annotated[str, Field(description="IPv4 address to reserve")],
+        mac: Annotated[str, Field(description="MAC address (aa:bb:cc:dd:ee:ff)")],
+        description: Annotated[Optional[str], Field(description="Description", default=None)] = None,
+        dhcp_server_id: Annotated[Optional[str], Field(description="DHCP server ID", default=None)] = None,
+        interface: Annotated[Optional[str], Field(description="Interface whose DHCP server to use", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.dhcp_tools.create_dhcp_reservation(
+            device_id, ip, mac, description, dhcp_server_id, interface, vdom
+        ))
+
+    @_tool(DELETE_DHCP_RESERVATION_DESC)
+    def delete_dhcp_reservation(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        dhcp_server_id: Annotated[Optional[str], Field(description="DHCP server ID", default=None)] = None,
+        reservation_id: Annotated[Optional[str], Field(description="Reservation entry ID", default=None)] = None,
+        ip: Annotated[Optional[str], Field(description="Reserved IPv4 address", default=None)] = None,
+        mac: Annotated[Optional[str], Field(description="Reserved MAC address", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.dhcp_tools.delete_dhcp_reservation(
+            device_id, dhcp_server_id, reservation_id, ip, mac, vdom
+        ))
+
+    @_tool(LIST_SECURITY_PROFILES_DESC)
+    def list_security_profiles(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        profile_type: Annotated[Literal["application", "webfilter", "antivirus", "ips", "dnsfilter", "ssl-ssh"],
+                                Field(description="Profile type")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.security_tools.list_security_profiles(device_id, profile_type, vdom))
+
+    @_tool(GET_SECURITY_PROFILE_DETAIL_DESC)
+    def get_security_profile_detail(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        profile_type: Annotated[Literal["application", "webfilter", "antivirus", "ips", "dnsfilter", "ssl-ssh"],
+                                Field(description="Profile type")],
+        name: Annotated[str, Field(description="Profile name")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.security_tools.get_security_profile_detail(device_id, profile_type, name, vdom))
+
+    @_tool(LIST_IPSEC_TUNNELS_DESC)
+    def list_ipsec_tunnels(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.vpn_tools.list_ipsec_tunnels(device_id, vdom))
+
+    @_tool(LIST_SSL_VPN_SESSIONS_DESC)
+    def list_ssl_vpn_sessions(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.vpn_tools.list_ssl_vpn_sessions(device_id, vdom))
+
+    @_tool(LIST_LOCAL_USERS_DESC)
+    def list_local_users(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.user_tools.list_local_users(device_id, vdom))
+
+    @_tool(LIST_USER_GROUPS_DESC)
+    def list_user_groups(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.user_tools.list_user_groups(device_id, vdom))
+
+    @_tool(LIST_FIREWALL_AUTH_SESSIONS_DESC)
+    def list_firewall_auth_sessions(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.user_tools.list_firewall_auth_sessions(device_id, vdom))
+
+    @_tool(GET_SYSTEM_RESOURCES_DESC)
+    def get_system_resources(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.system_tools.get_system_resources(device_id, vdom))
+
+    @_tool(LIST_ACTIVE_SESSIONS_DESC)
+    def list_active_sessions(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        source_ip: Annotated[Optional[str], Field(description="Source IPv4 filter", default=None)] = None,
+        destination_ip: Annotated[Optional[str], Field(description="Destination IPv4 filter", default=None)] = None,
+        destination_port: Annotated[Optional[int], Field(description="Destination port filter", default=None)] = None,
+        policy_id: Annotated[Optional[str], Field(description="Policy ID filter", default=None)] = None,
+        count: Annotated[int, Field(description="Maximum sessions to return", default=50)] = 50,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.system_tools.list_active_sessions(
+            device_id, source_ip, destination_ip, destination_port, policy_id, count, vdom
+        ))
+
+    @_tool(QUERY_TRAFFIC_LOG_DESC)
+    def query_traffic_log(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        source_ip: Annotated[Optional[str], Field(description="Source IPv4 filter", default=None)] = None,
+        destination_ip: Annotated[Optional[str], Field(description="Destination IPv4 filter", default=None)] = None,
+        destination_port: Annotated[Optional[int], Field(description="Destination port filter", default=None)] = None,
+        policy_id: Annotated[Optional[str], Field(description="Policy ID filter", default=None)] = None,
+        action: Annotated[Optional[str], Field(description="Action filter (deny, accept, close, ...)", default=None)] = None,
+        rows: Annotated[int, Field(description="Maximum records", default=50)] = 50,
+        source: Annotated[Literal["memory", "disk"], Field(description="Log source", default="memory")] = "memory",
+        raw_filter: Annotated[Optional[str], Field(description="Raw FortiOS filter expression", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.system_tools.query_traffic_log(
+            device_id, source_ip, destination_ip, destination_port, policy_id, action, rows, source, raw_filter, vdom
+        ))
+
+    @_tool(BACKUP_CONFIG_DESC)
+    def backup_config(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        output_path: Annotated[str, Field(description="Absolute file path to write on the MCP host")],
+        scope: Annotated[Literal["global", "vdom"], Field(description="Backup scope", default="global")] = "global",
+        overwrite: Annotated[bool, Field(description="Replace an existing file", default=False)] = False,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.system_tools.backup_config(device_id, output_path, scope, overwrite, vdom))
+
+    # --- (C3) generic pass-through -----------------------------------------
+
+    @_tool(CMDB_LIST_DESC)
+    def cmdb_list(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        path: Annotated[str, Field(description="cmdb table path, e.g. firewall/policy")],
+        filter_expr: Annotated[Optional[str], Field(description="FortiOS filter expression(s), '&'-joined", default=None)] = None,
+        start: Annotated[Optional[int], Field(description="Pagination offset", default=None)] = None,
+        count: Annotated[Optional[int], Field(description="Maximum objects to return", default=None)] = None,
+        format_fields: Annotated[Optional[str], Field(description="'|'-separated fields to return", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.generic_tools.cmdb_list(device_id, path, filter_expr, start, count, format_fields, vdom))
+
+    @_tool(CMDB_GET_DESC)
+    def cmdb_get(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        path: Annotated[str, Field(description="cmdb table path")],
+        key: Annotated[str, Field(description="Object key")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.generic_tools.cmdb_get(device_id, path, key, vdom))
+
+    @_tool(CREATE_CMDB_OBJECT_DESC)
+    def create_cmdb_object(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        path: Annotated[str, Field(description="cmdb table path")],
+        data: Annotated[dict, Field(description="Object payload (FortiOS field names)")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.generic_tools.create_cmdb_object(device_id, path, data, vdom))
+
+    @_tool(UPDATE_CMDB_OBJECT_DESC)
+    def update_cmdb_object(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        path: Annotated[str, Field(description="cmdb table path")],
+        key: Annotated[str, Field(description="Object key")],
+        data: Annotated[dict, Field(description="Fields to change")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.generic_tools.update_cmdb_object(device_id, path, key, data, vdom))
+
+    @_tool(DELETE_CMDB_OBJECT_DESC)
+    def delete_cmdb_object(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        path: Annotated[str, Field(description="cmdb table path")],
+        key: Annotated[str, Field(description="Object key")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.generic_tools.delete_cmdb_object(device_id, path, key, vdom))
+
+    @_tool(MONITOR_GET_DESC)
+    def monitor_get(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        path: Annotated[str, Field(description="monitor path, e.g. system/status")],
+        params: Annotated[Optional[dict], Field(description="Query parameters", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.generic_tools.monitor_get(device_id, path, params, vdom))
+
+    @_tool(EXECUTE_MONITOR_ACTION_DESC)
+    def execute_monitor_action(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        path: Annotated[str, Field(description="monitor action path, e.g. vpn/ipsec/tunnel_down")],
+        data: Annotated[Optional[dict], Field(description="JSON body", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.generic_tools.execute_monitor_action(device_id, path, data, vdom))
+
+    @_tool(LOG_GET_DESC)
+    def log_get(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        path: Annotated[str, Field(description="log path, e.g. memory/event/system")],
+        rows: Annotated[int, Field(description="Maximum records", default=50)] = 50,
+        filter_expr: Annotated[Optional[str], Field(description="FortiOS filter expression(s), '&'-joined", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.generic_tools.log_get(device_id, path, rows, filter_expr, vdom))
+
+    # --- (C4) parameterized diagnostics -------------------------------------
+
+    @_tool(LOOKUP_POLICY_DESC)
+    def lookup_policy(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        source_ip: Annotated[str, Field(description="Source IPv4 address")],
+        destination_ip: Annotated[str, Field(description="Destination IPv4 address")],
+        destination_port: Annotated[int, Field(description="Destination port")],
+        protocol: Annotated[str, Field(description="tcp, udp, icmp, sctp or protocol number", default="tcp")] = "tcp",
+        source_interface: Annotated[Optional[str], Field(description="Ingress interface name", default=None)] = None,
+        source_port: Annotated[Optional[int], Field(description="Source port", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.firewall_tools.lookup_policy(
+            device_id, source_ip, destination_ip, destination_port, protocol, source_interface, source_port, vdom
+        ))
+
+    @_tool(LOOKUP_ROUTE_DESC)
+    def lookup_route(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        destination: Annotated[str, Field(description="Destination IPv4 address")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.routing_tools.lookup_route(device_id, destination, vdom))
+
+    @_tool(EXECUTE_IPSEC_TUNNEL_ACTION_DESC)
+    def execute_ipsec_tunnel_action(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        phase1_name: Annotated[str, Field(description="Phase-1 interface name")],
+        action: Annotated[Literal["up", "down"], Field(description="Bring the tunnel up or down")],
+        phase2_name: Annotated[Optional[str], Field(description="Phase-2 selector name", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.vpn_tools.execute_ipsec_tunnel_action(device_id, phase1_name, action, phase2_name, vdom))
+
+    @_tool(GET_FORTIVIEW_TOP_DESC)
+    def get_fortiview_top(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        report_by: Annotated[Literal["source", "destination", "application", "threat", "country", "policy", "interface", "website", "web_category"],
+                             Field(description="Dimension to report on", default="source")] = "source",
+        count: Annotated[int, Field(description="Rows to return", default=20)] = 20,
+        sort_by: Annotated[Literal["bytes", "sessions", "bandwidth"], Field(description="Sort key", default="bytes")] = "bytes",
+        source_interface: Annotated[Optional[str], Field(description="Source interface filter", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.system_tools.get_fortiview_top(device_id, report_by, count, sort_by, source_interface, vdom))
+
+    @_tool(PING_FROM_DEVICE_DESC)
+    def ping_from_device(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        target: Annotated[str, Field(description="IPv4 address or hostname to ping")],
+        source_interface: Annotated[Optional[str], Field(description="Source interface", default=None)] = None,
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.system_tools.ping_from_device(device_id, target, source_interface, vdom))
+
+    @_tool(GEOIP_LOOKUP_DESC)
+    def geoip_lookup(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        ip: Annotated[str, Field(description="IPv4 address")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.system_tools.geoip_lookup(device_id, ip, vdom))
+
+    @_tool(QUERY_EVENT_LOG_DESC)
+    def query_event_log(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        category: Annotated[str, Field(description="Event category (system, vpn, user, router, wireless, ...)", default="system")] = "system",
+        rows: Annotated[int, Field(description="Maximum records", default=50)] = 50,
+        raw_filter: Annotated[Optional[str], Field(description="Raw FortiOS filter expression", default=None)] = None,
+        source: Annotated[Literal["memory", "disk"], Field(description="Log source", default="memory")] = "memory",
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.system_tools.query_event_log(device_id, category, rows, raw_filter, source, vdom))
+
+    @_tool(QUERY_UTM_LOG_DESC)
+    def query_utm_log(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        log_type: Annotated[str, Field(description="UTM log type (webfilter, app-ctrl, ips, virus, dns, ...)", default="webfilter")] = "webfilter",
+        rows: Annotated[int, Field(description="Maximum records", default=50)] = 50,
+        source_ip: Annotated[Optional[str], Field(description="Source IPv4 filter", default=None)] = None,
+        raw_filter: Annotated[Optional[str], Field(description="Raw FortiOS filter expression", default=None)] = None,
+        source: Annotated[Literal["memory", "disk"], Field(description="Log source", default="memory")] = "memory",
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.system_tools.query_utm_log(device_id, log_type, rows, source_ip, raw_filter, source, vdom))
+
+    @_tool(GET_LOG_SETTINGS_DESC)
+    def get_log_settings(
+        device_id: Annotated[str, Field(description="FortiGate device identifier")],
+        vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+    ) -> List[Content]:
+        return cast(List[Content], tools.system_tools.get_log_settings(device_id, vdom))
+
+    # --- (C5) declarative catalog: one (device_id, vdom) read tool per entry
+
+    def _catalog_tool(entry: Any) -> Callable[..., Any]:
+        def catalog_fn(
+            device_id: Annotated[str, Field(description="FortiGate device identifier")],
+            vdom: Annotated[Optional[str], Field(description="Virtual Domain", default=None)] = None
+        ) -> List[Content]:
+            return cast(List[Content], tools.catalog_tools.run(entry.name, device_id, vdom))
+        catalog_fn.__name__ = entry.name
+        catalog_fn.__qualname__ = entry.name
+        catalog_fn.__doc__ = entry.description
+        return catalog_fn
+
+    for _entry in CATALOG:
+        _tool(_entry.description)(_catalog_tool(_entry))
+
     # --- (D) stdio-only: health_check, get_server_info ----------------------
 
     if transport == "stdio":
@@ -580,7 +1108,14 @@ def register_tools(mcp: Any, tools: Any, transport: Literal["stdio", "http"]) ->
                     "firewall_tools": tools.firewall_tools.get_schema_info(),
                     "network_tools": tools.network_tools.get_schema_info(),
                     "routing_tools": tools.routing_tools.get_schema_info(),
-                    "virtual_ip_tools": tools.virtual_ip_tools.get_schema_info()
+                    "virtual_ip_tools": tools.virtual_ip_tools.get_schema_info(),
+                    "dhcp_tools": tools.dhcp_tools.get_schema_info(),
+                    "security_tools": tools.security_tools.get_schema_info(),
+                    "vpn_tools": tools.vpn_tools.get_schema_info(),
+                    "user_tools": tools.user_tools.get_schema_info(),
+                    "system_tools": tools.system_tools.get_schema_info(),
+                    "generic_tools": tools.generic_tools.get_schema_info(),
+                    "catalog_tools": tools.catalog_tools.get_schema_info(),
                 }
             }
             return _format_json_response(schema_info, "get_schema_info", logger=getattr(tools, "logger", None))

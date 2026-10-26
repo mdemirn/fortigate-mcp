@@ -32,6 +32,13 @@ from .tools.firewall import FirewallTools
 from .tools.network import NetworkTools
 from .tools.routing import RoutingTools
 from .tools.virtual_ip import VirtualIPTools
+from .tools.dhcp import DhcpTools
+from .tools.security import SecurityProfileTools
+from .tools.vpn import VpnTools
+from .tools.users import UserTools
+from .tools.system import SystemTools
+from .tools.generic import GenericTools
+from .tools.catalog import CatalogTools
 
 class FortiGateMCPHTTPServer:
     """
@@ -115,6 +122,13 @@ class FortiGateMCPHTTPServer:
         self.network_tools = NetworkTools(self.fortigate_manager)
         self.routing_tools = RoutingTools(self.fortigate_manager)
         self.virtual_ip_tools = VirtualIPTools(self.fortigate_manager)
+        self.dhcp_tools = DhcpTools(self.fortigate_manager)
+        self.security_tools = SecurityProfileTools(self.fortigate_manager)
+        self.vpn_tools = VpnTools(self.fortigate_manager)
+        self.user_tools = UserTools(self.fortigate_manager)
+        self.system_tools = SystemTools(self.fortigate_manager)
+        self.generic_tools = GenericTools(self.fortigate_manager)
+        self.catalog_tools = CatalogTools(self.fortigate_manager)
         
         # Initialize FastMCP
         self.mcp = FastMCP("FortiGateMCP-HTTP")

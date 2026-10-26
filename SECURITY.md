@@ -14,7 +14,7 @@ line receives security fixes. There is no LTS or backport commitment.
 Please report security vulnerabilities using **GitHub Private Vulnerability Reporting**
 (the Security Advisories tab):
 
-https://github.com/alpadalar/fortigate-mcp-server/security/advisories/new
+https://github.com/mdemirn/fortigate-mcp/security/advisories/new
 
 **Do not open a public GitHub issue for security reports.** Private Vulnerability Reporting
 lets you share details, proof-of-concept steps, and affected versions with the maintainer
@@ -25,8 +25,8 @@ We will acknowledge new reports and work with you on remediation and disclosure 
 
 ## What Can This Server Do To Your Firewall
 
-This MCP server exposes **33 unique tools**, registered as **61 total tool-surface
-registrations across the stdio (30 tools) and HTTP (31 tools) transports** (three
+This MCP server exposes **140 unique tools**, registered as **275 total tool-surface
+registrations across the stdio (137 tools) and HTTP (138 tools) transports** (three
 create-tools — `create_address_object`, `create_service_object`, `create_static_route` —
 have transport-specific parameter shapes and are therefore counted once per transport; every
 other tool name is schema-identical across both transports). Each tool operates against
@@ -37,9 +37,11 @@ device's own FortiGate account already permits.
 
 Depending on which tools an MCP client (or the human directing it) chooses to invoke, and
 whether write/destructive tools are enabled (see "Implemented Security Controls" below),
-this server can read firewall configuration and device status, and can create, modify, or
-delete firewall policies, address objects, service objects, static routes, and virtual IPs
-on any registered device. Treat any MCP client with access to this server as having the same
+this server can read firewall configuration, device status, DHCP leases, VPN status, users,
+security profiles, live sessions and traffic logs, save a configuration backup to the MCP
+host's local disk, and can create, modify, reorder, or delete firewall policies, address
+objects and groups, service objects, static routes, virtual IPs and DHCP reservations on any
+registered device. Treat any MCP client with access to this server as having the same
 operational capability as a human operator holding the configured FortiGate account's
 permissions.
 
@@ -66,6 +68,34 @@ permissions.
 | `test_connection` | read |
 | `health` | read |
 | `get_schema_info` | read |
+| `list_address_groups` | read |
+| `get_address_group_detail` | read |
+| `list_service_groups` | read |
+| `list_dhcp_servers` | read |
+| `list_dhcp_leases` | read |
+| `list_security_profiles` | read |
+| `get_security_profile_detail` | read |
+| `list_ipsec_tunnels` | read |
+| `list_ssl_vpn_sessions` | read |
+| `list_local_users` | read |
+| `list_user_groups` | read |
+| `list_firewall_auth_sessions` | read |
+| `get_system_resources` | read |
+| `list_active_sessions` | read |
+| `query_traffic_log` | read |
+| `backup_config` | read |
+| `cmdb_list` | read |
+| `cmdb_get` | read |
+| `monitor_get` | read |
+| `log_get` | read |
+| `lookup_policy` | read |
+| `lookup_route` | read |
+| `get_fortiview_top` | read |
+| `ping_from_device` | read |
+| `geoip_lookup` | read |
+| `query_event_log` | read |
+| `query_utm_log` | read |
+| `get_log_settings` | read |
 | `add_device` | write |
 | `create_firewall_policy` | write |
 | `update_firewall_policy` | write |
@@ -75,22 +105,106 @@ permissions.
 | `create_static_route` | write |
 | `create_virtual_ip` | write |
 | `update_virtual_ip` | write |
+| `create_address_group` | write |
+| `add_address_group_members` | write |
+| `update_address_object` | write |
+| `update_service_object` | write |
+| `move_firewall_policy` | write |
+| `create_dhcp_reservation` | write |
+| `create_cmdb_object` | write |
+| `update_cmdb_object` | write |
+| `execute_monitor_action` | write |
+| `execute_ipsec_tunnel_action` | write |
 | `remove_device` | destructive |
 | `delete_firewall_policy` | destructive |
 | `delete_static_route` | destructive |
 | `delete_virtual_ip` | destructive |
+| `remove_address_group_members` | destructive |
+| `delete_address_group` | destructive |
+| `delete_address_object` | destructive |
+| `delete_service_object` | destructive |
+| `delete_dhcp_reservation` | destructive |
+| `delete_cmdb_object` | destructive |
+| `get_system_global` | read |
+| `get_dns_settings` | read |
+| `get_ntp_settings` | read |
+| `list_admins` | read |
+| `list_api_users` | read |
+| `list_zones` | read |
+| `list_snmp_communities` | read |
+| `get_snmp_sysinfo` | read |
+| `list_syslog_settings` | read |
+| `get_fortianalyzer_settings` | read |
+| `list_local_certificates` | read |
+| `list_ca_certificates` | read |
+| `get_ha_status` | read |
+| `get_license_status` | read |
+| `list_firmware` | read |
+| `get_system_time` | read |
+| `get_performance_status` | read |
+| `get_security_rating` | read |
+| `list_running_processes` | read |
+| `list_ip_pools` | read |
+| `list_vip_groups` | read |
+| `list_recurring_schedules` | read |
+| `list_onetime_schedules` | read |
+| `list_central_snat_rules` | read |
+| `list_traffic_shapers` | read |
+| `list_shaping_policies` | read |
+| `list_internet_service_names` | read |
+| `list_policy_routes` | read |
+| `get_bgp_config` | read |
+| `get_ospf_config` | read |
+| `list_prefix_lists` | read |
+| `list_route_maps` | read |
+| `get_sdwan_config` | read |
+| `list_sdwan_health_checks` | read |
+| `list_sdwan_members` | read |
+| `list_ipv6_routes` | read |
+| `list_ipsec_phase1` | read |
+| `list_ipsec_phase2` | read |
+| `get_ssl_vpn_settings` | read |
+| `list_ssl_vpn_portals` | read |
+| `list_remote_certificates` | read |
+| `list_radius_servers` | read |
+| `list_ldap_servers` | read |
+| `list_tacacs_servers` | read |
+| `list_saml_servers` | read |
+| `list_fsso_agents` | read |
+| `list_fortitokens` | read |
+| `list_endpoint_devices` | read |
+| `list_arp_table` | read |
+| `list_lldp_neighbors` | read |
+| `list_managed_switches` | read |
+| `list_switch_port_stats` | read |
+| `list_interface_counters` | read |
+| `list_wireless_ssids` | read |
+| `list_ap_profiles` | read |
+| `list_managed_aps` | read |
+| `list_wifi_clients` | read |
+| `list_rogue_aps` | read |
+| `get_wifi_controller_settings` | read |
+| `list_url_filters` | read |
+| `list_dns_domain_filters` | read |
+| `list_ips_custom_signatures` | read |
+| `list_application_groups` | read |
 
-**Read-only tools** (20) only retrieve information — device status, firewall policies,
-address/service objects, routes, interfaces, virtual IPs, and server health/schema data.
+**Read-only tools** (111) only retrieve information — device status, firewall policies,
+address/service objects and groups, routes, interfaces, virtual IPs, DHCP servers and leases,
+security profiles, VPN status, users, live sessions, traffic logs, a configuration backup
+(written only to the MCP host's local disk, never to the device) and server health/schema data.
 They never modify FortiGate device state and are never subject to the write gate described
 below.
 
-**Write tools** (9) create new objects (policies, address/service objects, routes, virtual
-IPs, or a newly-registered device) or modify existing ones on the target FortiGate device.
+**Write tools** (19) create new objects (policies, address/service objects, address
+groups, routes, virtual IPs, DHCP reservations, or a newly-registered device), modify existing
+ones, add group members, reorder policies, run monitor actions (tunnel up/down, session close) or write any
+cmdb table through the generic `create_cmdb_object`/`update_cmdb_object` tools on the target FortiGate device.
 They are rejected by default unless the write gate is explicitly enabled (see below).
 
-**Destructive tools** (4) permanently remove objects from the target device or unregister a
-device from this server's in-memory registry (`remove_device`, and the `delete_*` tools).
+**Destructive tools** (10) permanently remove objects (or group members) from the target
+device or unregister a device from this server's in-memory registry (`remove_device`,
+`remove_address_group_members`, and the `delete_*` tools including the generic `delete_cmdb_object`).
 Like write tools, they are rejected by default unless the write gate is explicitly enabled.
 
 ## Implemented Security Controls

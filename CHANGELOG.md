@@ -7,7 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [1.1.0] - 2026-10-26
 ### Added
+
+- 107 new tools (140 unique, 275 registrations: 137 stdio + 138 HTTP), all registered through
+  the shared registry with the same read-only-by-default write gate:
+  address groups (`list_address_groups`, `get_address_group_detail`, `create_address_group`,
+  `add_address_group_members`, `remove_address_group_members`, `delete_address_group`),
+  object maintenance (`update_address_object`, `delete_address_object`,
+  `update_service_object`, `delete_service_object`, `list_service_groups`),
+  policy ordering (`move_firewall_policy`), DHCP (`list_dhcp_servers`, `list_dhcp_leases`,
+  `create_dhcp_reservation`, `delete_dhcp_reservation`), security profiles
+  (`list_security_profiles`, `get_security_profile_detail`), VPN (`list_ipsec_tunnels`,
+  `list_ssl_vpn_sessions`), identity (`list_local_users`, `list_user_groups`,
+  `list_firewall_auth_sessions`) and monitoring (`get_system_resources`,
+  `list_active_sessions`, `query_traffic_log`, `backup_config`)
+- Generic pass-through tools covering every FortiOS REST table and monitor endpoint
+  (`cmdb_list`, `cmdb_get`, `create_cmdb_object`, `update_cmdb_object`, `delete_cmdb_object`,
+  `monitor_get`, `execute_monitor_action`, `log_get`) with path/key validation and secret redaction
+- Diagnostics: `lookup_policy`, `lookup_route`, `get_fortiview_top`, `ping_from_device`,
+  `geoip_lookup`, `query_event_log`, `query_utm_log`, `get_log_settings`, `execute_ipsec_tunnel_action`
+- A declarative catalog (`tools/catalog.py`) of 63 read-only list tools: system settings, admins and
+  API users, certificates, HA/license/firmware, IP pools, schedules, SNAT, shapers, policy routes,
+  BGP/OSPF, SD-WAN, IPsec phase 1/2, SSL-VPN settings and portals, RADIUS/LDAP/TACACS+/SAML/FSSO,
+  FortiTokens, device inventory, ARP, LLDP, FortiSwitch, wireless SSIDs/APs/clients/rogue APs,
+  URL and DNS filter tables, custom IPS signatures, application groups
+- Security profile tools now cover dlp, emailfilter, file-filter, icap, ssh-filter, waf, voip and
+  virtual-patch profiles
+- `get_firewall_policy_detail` now expands address/service group members, and shows the
+  policy's identity restrictions (users/groups) and security profile names
+- Risk-classification naming rule generalized to the `create_/update_/add_/move_/execute_` (write) and
+  `delete_/remove_` (destructive) prefixes; golden tool-schema fixtures regenerated for the
+  new surface (a reviewed, intentional schema change)
 
 - Four GitHub Actions workflows (`test.yml`, `lint.yml`, `security.yml`, `release.yml`),
   each with every `uses:` action pinned to a live-verified 40-character commit SHA and
@@ -23,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Dependencies refreshed against current advisories (mcp 1.30, fastmcp 3.4.11, anyio 4.14, certifi,
+  cryptography 50, urllib3 2.8, pyjwt 2.15, setuptools 84, filelock 4.2, opentelemetry 1.45);
+  `pip-audit` reports no known vulnerabilities for the locked set
+- `safety` dropped from the dev/security extras (it pinned a vulnerable `filelock`); `pip-audit`
+  is the audit tool, matching the Security workflow
+- Docker base image moved to the current `python:3.12-slim` digest; image label 1.1.0
 - `ruff` added as a pinned lint dependency and calibrated clean against its built-in
   default rule set across `src/` and `tests/`; `mypy src/` now exits 0 under the
   pre-existing strict `[tool.mypy]` config, with zero strictness dialed back (CI-02)

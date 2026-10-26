@@ -131,6 +131,27 @@ class RoutingTools(FortiGateTool):
         except Exception as e:
             return self._handle_error("get static route detail", device_id, e)
     
+    def lookup_route(self, device_id: str, destination: str, vdom: Optional[str] = None) -> List[Content]:
+        """Ask the routing table which route/interface/gateway reaches a destination (monitor/router/lookup)."""
+        try:
+            self._validate_device_exists(device_id)
+            self._validate_required_params(destination=destination)
+            import ipaddress as _ip
+            _ip.ip_address(destination)
+            api_client = self._get_device_api(device_id)
+            result = api_client.monitor_get("router/lookup", params={"destination": destination}, vdom=vdom)
+            body = result.get("results", result)
+            lines = [f"Route Lookup - Device: {device_id}", "", f"  Destination: {destination}"]
+            if isinstance(body, dict) and body:
+                for key, value in body.items():
+                    if isinstance(value, (str, int, float, bool)) and value not in ("", None):
+                        lines.append(f"  {key}: {value}")
+            else:
+                lines.append("  Result: no route (destination unreachable from this device)")
+            return [Content(type="text", text="\n".join(lines))]
+        except Exception as e:
+            return self._handle_error("lookup route", device_id, e)
+
     def get_schema_info(self) -> Dict[str, Any]:
         """Get schema information for routing tools.
         

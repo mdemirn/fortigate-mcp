@@ -197,3 +197,8 @@ fortigate_mcp.log
 config/config.yaml
 config/local_config.yaml
 config/config.json
+
+# Local environments and config backups (never commit device tokens)
+.venv*/
+config/config.json.*
+config/*.bak*

@@ -128,7 +128,8 @@ class FortiGateTool:
             address_objects = kwargs.get('address_objects')
             service_objects = kwargs.get('service_objects')
             return FortiGateFormatters.format_firewall_policy_detail(
-                data, device_id, address_objects, service_objects
+                data, device_id, address_objects, service_objects,
+                kwargs.get('address_groups'), kwargs.get('service_groups')
             )
         elif resource_type == "address_objects":
             return FortiGateFormatters.format_address_objects(data)
@@ -145,7 +146,13 @@ class FortiGateTool:
         elif resource_type == "virtual_ip_detail":
             return FortiGateFormatters.format_virtual_ip_detail(data)
         else:
-            # Fallback to JSON formatting for unknown types
+            # Extended resource types resolve to a ``format_<resource_type>``
+            # formatter by name (e.g. "address_groups" ->
+            # FortiGateFormatters.format_address_groups); anything else falls
+            # back to JSON formatting.
+            formatter = getattr(FortiGateFormatters, f"format_{resource_type}", None) if resource_type else None
+            if callable(formatter):
+                return cast(List[Content], formatter(data, **kwargs))
             return FortiGateFormatters.format_json_response(data)
 
     def _handle_error(self, operation: str, device_id: str, error: Exception) -> List[Content]:

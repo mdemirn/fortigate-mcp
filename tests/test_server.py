@@ -36,16 +36,16 @@ async def _call_via_client(server, tool_name, args):
 
 
 def test_stdio_server_constructs_successfully(tmp_config_path):
-    """FortiGateMCPServer constructs without exception and registers 30 tools."""
+    """FortiGateMCPServer constructs without exception and registers 137 tools."""
     server = FortiGateMCPServer(tmp_config_path)
 
     assert server is not None
     tools = asyncio.run(_list_via_client(server))
-    assert len(tools) == 30
+    assert len(tools) == 137
 
 
 # Matrix of (tool_name, tools_attr, method_name, args) covering every one of the
-# 27 sync-forwarding wrappers registered by registry.register_tools() for
+# 54 sync-forwarding wrappers registered by registry.register_tools() for
 # transport="stdio" (excludes get_firewall_policy_detail, which stays
 # genuinely async, and the 2 stdio-only system tools).
 # Each entry is proven independently by monkeypatching the target Tools-layer
@@ -134,6 +134,34 @@ TOOL_CALL_MATRIX = [
     ),
     ("get_virtual_ip_detail", "virtual_ip_tools", "get_virtual_ip_detail", {"device_id": "probe", "name": "vip1"}),
     ("delete_virtual_ip", "virtual_ip_tools", "delete_virtual_ip", {"device_id": "probe", "name": "vip1"}),
+    # Extended surface
+    ("list_address_groups", "network_tools", "list_address_groups", {"device_id": "probe"}),
+    ("get_address_group_detail", "network_tools", "get_address_group_detail", {"device_id": "probe", "name": "g"}),
+    ("create_address_group", "network_tools", "create_address_group", {"device_id": "probe", "name": "g", "members": ["a"]}),
+    ("add_address_group_members", "network_tools", "add_address_group_members", {"device_id": "probe", "name": "g", "members": ["a"]}),
+    ("remove_address_group_members", "network_tools", "remove_address_group_members", {"device_id": "probe", "name": "g", "members": ["a"]}),
+    ("delete_address_group", "network_tools", "delete_address_group", {"device_id": "probe", "name": "g"}),
+    ("update_address_object", "network_tools", "update_address_object", {"device_id": "probe", "name": "a", "address_data": {"comment": "c"}}),
+    ("delete_address_object", "network_tools", "delete_address_object", {"device_id": "probe", "name": "a"}),
+    ("update_service_object", "network_tools", "update_service_object", {"device_id": "probe", "name": "s", "service_data": {"comment": "c"}}),
+    ("delete_service_object", "network_tools", "delete_service_object", {"device_id": "probe", "name": "s"}),
+    ("list_service_groups", "network_tools", "list_service_groups", {"device_id": "probe"}),
+    ("move_firewall_policy", "firewall_tools", "move_policy", {"device_id": "probe", "policy_id": "2", "position": "before", "reference_id": "1"}),
+    ("list_dhcp_servers", "dhcp_tools", "list_dhcp_servers", {"device_id": "probe"}),
+    ("list_dhcp_leases", "dhcp_tools", "list_dhcp_leases", {"device_id": "probe"}),
+    ("create_dhcp_reservation", "dhcp_tools", "create_dhcp_reservation", {"device_id": "probe", "ip": "10.0.0.5", "mac": "aa:bb:cc:dd:ee:ff"}),
+    ("delete_dhcp_reservation", "dhcp_tools", "delete_dhcp_reservation", {"device_id": "probe", "ip": "10.0.0.5"}),
+    ("list_security_profiles", "security_tools", "list_security_profiles", {"device_id": "probe", "profile_type": "application"}),
+    ("get_security_profile_detail", "security_tools", "get_security_profile_detail", {"device_id": "probe", "profile_type": "webfilter", "name": "p"}),
+    ("list_ipsec_tunnels", "vpn_tools", "list_ipsec_tunnels", {"device_id": "probe"}),
+    ("list_ssl_vpn_sessions", "vpn_tools", "list_ssl_vpn_sessions", {"device_id": "probe"}),
+    ("list_local_users", "user_tools", "list_local_users", {"device_id": "probe"}),
+    ("list_user_groups", "user_tools", "list_user_groups", {"device_id": "probe"}),
+    ("list_firewall_auth_sessions", "user_tools", "list_firewall_auth_sessions", {"device_id": "probe"}),
+    ("get_system_resources", "system_tools", "get_system_resources", {"device_id": "probe"}),
+    ("list_active_sessions", "system_tools", "list_active_sessions", {"device_id": "probe", "source_ip": "10.0.0.1"}),
+    ("query_traffic_log", "system_tools", "query_traffic_log", {"device_id": "probe", "rows": 5}),
+    ("backup_config", "system_tools", "backup_config", {"device_id": "probe", "output_path": "/tmp/x.conf"}),
 ]
 
 

@@ -10,7 +10,7 @@ This project uses [`uv`](https://docs.astral.sh/uv/) as its package manager, wit
 `uv.lock` for reproducible installs.
 
 ```bash
-git clone https://github.com/alpadalar/fortigate-mcp-server.git
+git clone https://github.com/mdemirn/fortigate-mcp.git
 cd fortigate-mcp-server
 
 # Install the locked dependency set, including all dev/test/lint/security extras

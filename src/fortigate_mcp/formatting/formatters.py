@@ -60,7 +60,9 @@ class FortiGateFormatters:
     @staticmethod
     def format_firewall_policy_detail(policy_data: Dict[str, Any], device_id: str,
                                     address_objects: Optional[Dict[str, Any]] = None,
-                                    service_objects: Optional[Dict[str, Any]] = None) -> List[Content]:
+                                    service_objects: Optional[Dict[str, Any]] = None,
+                                    address_groups: Optional[Dict[str, Any]] = None,
+                                    service_groups: Optional[Dict[str, Any]] = None) -> List[Content]:
         """Format detailed firewall policy response.
         
         Args:
@@ -73,7 +75,8 @@ class FortiGateFormatters:
             List containing formatted Content object
         """
         formatted_text = FortiGateTemplates.firewall_policy_detail(
-            policy_data, device_id, address_objects, service_objects
+            policy_data, device_id, address_objects, service_objects,
+            address_groups, service_groups
         )
         return [Content(type="text", text=formatted_text)]
     
@@ -274,3 +277,86 @@ class FortiGateFormatters:
                 formatted_text += f"\nError: {error}"
         
         return [Content(type="text", text=formatted_text)]
+
+    # ------------------------------------------------------------------
+    # Extended tool surface: thin wrappers over the matching template.
+    # tools/base.py's _format_response resolves ``format_<resource_type>``
+    # by name, so adding a template + wrapper here is all a new resource
+    # type needs.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _text(text: str) -> List[Content]:
+        return [Content(type="text", text=text)]
+
+    @staticmethod
+    def format_address_groups(data: Dict[str, Any], **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.address_groups(data))
+
+    @staticmethod
+    def format_address_group_detail(data: Dict[str, Any], address_objects: Optional[Dict[str, Any]] = None,
+                                    address_groups: Optional[Dict[str, Any]] = None, **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.address_group_detail(data, address_objects, address_groups))
+
+    @staticmethod
+    def format_service_groups(data: Dict[str, Any], service_objects: Optional[Dict[str, Any]] = None,
+                              **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.service_groups(data, service_objects))
+
+    @staticmethod
+    def format_dhcp_servers(data: Dict[str, Any], **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.dhcp_servers(data))
+
+    @staticmethod
+    def format_dhcp_leases(data: Dict[str, Any], interface: Optional[str] = None, **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.dhcp_leases(data, interface))
+
+    @staticmethod
+    def format_security_profiles(data: Dict[str, Any], profile_type: str = "", **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.security_profiles(profile_type, data))
+
+    @staticmethod
+    def format_security_profile_detail(data: Dict[str, Any], profile_type: str = "",
+                                       app_names: Optional[Dict[int, Dict[str, Any]]] = None,
+                                       **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.security_profile_detail(profile_type, data, app_names))
+
+    @staticmethod
+    def format_ipsec_tunnels(data: Dict[str, Any], **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.ipsec_tunnels(data))
+
+    @staticmethod
+    def format_ssl_vpn_sessions(data: Dict[str, Any], **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.ssl_vpn_sessions(data))
+
+    @staticmethod
+    def format_local_users(data: Dict[str, Any], **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.local_users(data))
+
+    @staticmethod
+    def format_user_groups(data: Dict[str, Any], **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.user_groups(data))
+
+    @staticmethod
+    def format_auth_sessions(data: Dict[str, Any], **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.auth_sessions(data))
+
+    @staticmethod
+    def format_resource_usage(data: Dict[str, Any], **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.resource_usage(data))
+
+    @staticmethod
+    def format_sessions(data: Dict[str, Any], **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.sessions(data))
+
+    @staticmethod
+    def format_event_log(data: Dict[str, Any], category: str = "", **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.event_log(data, category))
+
+    @staticmethod
+    def format_utm_log(data: Dict[str, Any], log_type: str = "", **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.utm_log(data, log_type))
+
+    @staticmethod
+    def format_traffic_log(data: Dict[str, Any], **kwargs: Any) -> List[Content]:
+        return FortiGateFormatters._text(FortiGateTemplates.traffic_log(data))

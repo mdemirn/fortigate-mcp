@@ -69,7 +69,7 @@ def _fake_tools():
 
 def test_classification_completeness_matches_registered_tools():
     """set(RISK_CLASSIFICATION) equals the union of tool names registered by
-    register_tools() for both transports -- exactly 33 unique names."""
+    register_tools() for both transports -- exactly 140 unique names."""
     sdk_mcp = SDKFastMCP("classification-stdio")
     register_tools(sdk_mcp, _fake_tools(), transport="stdio")
     stdio_names = set(sdk_mcp._tool_manager._tools)
@@ -84,20 +84,20 @@ def test_classification_completeness_matches_registered_tools():
     union = stdio_names | http_names
 
     assert union == set(RISK_CLASSIFICATION)
-    assert len(RISK_CLASSIFICATION) == 33
+    assert len(RISK_CLASSIFICATION) == 140
     assert len(RISK_CLASSIFICATION) == len(set(RISK_CLASSIFICATION))  # no duplicate keys
 
 
 def test_classification_matches_naming_rule():
-    """Every write-classified name matches create_*/update_*/add_device;
-    every destructive-classified name matches delete_*/remove_device;
+    """Every write-classified name matches create_*/update_*/add_*/move_*/execute_*;
+    every destructive-classified name matches delete_*/remove_*;
     everything else is read -- re-derived from the name itself, not the
     dict, so a future misclassified addition fails this test even if
     completeness alone would not catch it."""
     for name, risk_class in RISK_CLASSIFICATION.items():
-        if name.startswith("create_") or name.startswith("update_") or name == "add_device":
+        if name.startswith(("create_", "update_", "add_", "move_", "execute_")):
             expected = "write"
-        elif name.startswith("delete_") or name == "remove_device":
+        elif name.startswith(("delete_", "remove_")):
             expected = "destructive"
         else:
             expected = "read"
