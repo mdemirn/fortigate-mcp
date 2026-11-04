@@ -19,6 +19,13 @@ The server exposes 140 unique tools, 275 total tool-surface registrations across
 (137) and HTTP (138) transports; three create-tools have transport-specific parameter
 shapes. Every tool that changes a device is disabled until you turn writes on.
 
+**Contents:** [Requirements](#requirements) ·
+[Installation](#installation) ·
+[Connect your MCP client](#6-connect-your-mcp-client) ·
+[HTTP transport](#http-transport) · [Docker](#docker) ·
+[Safety model](#safety-model) · [Tool reference](#tool-reference) ·
+[Troubleshooting](#troubleshooting)
+
 ## What you can do with it
 
 Typical requests, in the words you would use with the assistant:
@@ -44,55 +51,140 @@ understand one line of the policy table.
 
 ## Requirements
 
-- Python 3.11+ (3.12 or 3.13 recommended; the locked dependency set does not build on
-  3.14 yet because `pydantic-core 2.33` ships no wheel for it)
-- [`uv`](https://docs.astral.sh/uv/) or `pip`
-- A FortiGate reachable over HTTPS and a REST API admin with an API token
+- A machine that reaches the FortiGate management interface over HTTPS (TCP 443 or
+  your admin port)
+- Python 3.11 to 3.13. 3.12 is pinned in `.python-version` and recommended; 3.14 is not
+  supported yet because `pydantic-core 2.33` ships no wheel for it
+- [`uv`](https://docs.astral.sh/uv/) (recommended) or `pip`, and Git
+- FortiOS 7.4, 7.6 or 8.0, with a REST API admin and its API token
+- An MCP client that speaks stdio or streamable HTTP: Claude Code, Claude Desktop,
+  Cursor or another
+- Optional: Docker with Compose v2 for the container deployment, Node.js for
+  `mcp-remote` (Claude Desktop over HTTP), Node.js for the MCP Inspector check
 
-## Install
+## Installation
+
+The steps below take you from an empty machine to an assistant that can query your
+FortiGate:
+
+1. Install `uv`
+2. Get the code and install the dependencies
+3. Create a REST API admin on the FortiGate
+4. Write `config/config.json`
+5. Check the server
+6. Connect your MCP client
+7. Send the first requests, and enable writes when you need them
+
+### 1. Install uv
+
+macOS and Linux:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+macOS with Homebrew: `brew install uv`. Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Open a new terminal and check with `uv --version`.
+
+### 2. Get the code and install the dependencies
 
 ```bash
 git clone https://github.com/mdemirn/fortigate-mcp.git
 cd fortigate-mcp
-uv sync --locked          # installs the locked, reproducible dependency set
+uv sync --locked
+uv run fortigate-mcp-server --version    # prints: fortigate-mcp-server 1.1.0
+pwd                                      # note this absolute path for the client configs
 ```
 
-The repository pins Python 3.12 in `.python-version`; `uv` downloads it if needed.
+`uv sync --locked` creates `.venv`, downloads Python 3.12 if the machine does not have
+it, and installs the exact versions recorded in `uv.lock`.
+
 Without `uv`:
 
 ```bash
 python3.12 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e .
+fortigate-mcp-server --version
 ```
 
-## Create the API user on the FortiGate
+`pip` resolves the version ranges in `pyproject.toml` instead of the lock file. In the
+client configs below, use `/absolute/path/fortigate-mcp/.venv/bin/fortigate-mcp-server`
+(Windows: `.venv\Scripts\fortigate-mcp-server.exe`) as the command instead of `uv run`.
+
+### 3. Create a REST API admin on the FortiGate
 
 In the GUI: System > Administrators > Create New > REST API Admin. Pick an admin
-profile (a read-only profile is enough for the read tools; writes need a profile with
-the matching permissions), optionally restrict Trusted Hosts to the machine that runs
-this server, and copy the token shown once after saving.
+profile, restrict Trusted Hosts to the machine that runs this server, and copy the
+token shown once after saving.
 
-From the CLI:
+From the CLI, a read-only profile and an API user limited to the MCP host:
 
 ```
-config system api-user
-    edit "mcp-admin"
-        set accprofile "super_admin"
-        set vdom "root"
+config system accprofile
+    edit "mcp-read"
+        set comments "FortiGate MCP server, read-only"
+        set secfabgrp read
+        set ftviewgrp read
+        set authgrp read
+        set sysgrp read
+        set netgrp read
+        set loggrp read
+        set fwgrp read
+        set vpngrp read
+        set utmgrp read
+        set wanoptgrp read
+        set wifi read
     next
 end
-execute api-user generate-key mcp-admin
+config system api-user
+    edit "mcp-api"
+        set comments "FortiGate MCP server"
+        set accprofile "mcp-read"
+        set vdom "root"
+        config trusthost
+            edit 1
+                set ipv4-trusthost <mcp-host-ip> 255.255.255.255
+            next
+        end
+    next
+end
+execute api-user generate-key mcp-api
 ```
 
-## Configure
+- The read profile is enough for every read tool. For write tools, change `read` to
+  `read-write` on the areas the assistant may change (for example `fwgrp` for
+  policies and objects, `netgrp` for interfaces, routes and DHCP), or use the built-in
+  `super_admin` profile, which allows everything.
+- Set `vdom` to the VDOM the token should work in; on a multi-VDOM unit, create one API
+  user per VDOM or use one with access to all of them.
+- If the server reaches the FortiGate through NAT, the trusted host is the address the
+  FortiGate sees.
+
+Test the token from the machine that will run the server:
+
+```bash
+curl -H "Authorization: Bearer <api-token>" https://<fortigate-address>/api/v2/monitor/system/status
+```
+
+A JSON answer with `"status": "success"` means the token and the trusted host are
+right. A certificate error means the FortiGate presents a certificate this machine does
+not trust; fix that before step 4 (see `verify_ssl` below).
+
+### 4. Write the configuration
 
 ```bash
 cp config/config.example.json config/config.json
+chmod 600 config/config.json        # the file holds API tokens
 ```
 
-`config/config.json` is ignored by git. Each key under `devices` is the `device_id`
-the tools take:
+`config/config.json` is ignored by git. Replace the two sample devices in the copied
+file with your own. Each key under `devices` is the `device_id` the tools take:
 
 ```json
 {
@@ -127,36 +219,160 @@ the tools take:
 }
 ```
 
+| Key | Meaning |
+|---|---|
+| `server.allow_writes` | `false` keeps every write and destructive tool disabled (default) |
+| `fortigate.devices.<id>.host` | IP address or hostname of the FortiGate management interface |
+| `port` | HTTPS admin port, `443` unless you changed `admin-sport` |
+| `api_token` | The key from step 3 |
+| `vdom` | VDOM the requests go to |
+| `verify_ssl` | Verify the FortiGate certificate; keep it `true` |
+| `timeout` | Seconds per API request |
+| `auth.require_auth`, `auth.api_tokens` | Bearer-token protection for the HTTP transport only |
+| `logging.level`, `logging.console`, `logging.file` | Log level, stderr logging, optional rotating log file |
+
 - `allow_writes` keeps the server read-only until you set it to `true` (or export
-  `FORTIGATE_MCP_ALLOW_WRITES=1`). While it is `true`, every write and destructive tool
-  runs for real, including on production units, so turn it on deliberately.
+  `FORTIGATE_MCP_ALLOW_WRITES=1`). The environment variable can only turn writes on:
+  `FORTIGATE_MCP_ALLOW_WRITES=0` does not override `"allow_writes": true`. While writes
+  are on, every write and destructive tool runs for real, including on production
+  units, so turn it on deliberately.
 - Keep `verify_ssl` on. If the FortiGate still uses its factory self-signed
   certificate, install a certificate the client trusts (or add the FortiGate's CA to the
   system trust store) rather than disabling verification. The server logs a warning
   for every device that has verification turned off.
+- `logging.file` is resolved from the server's working directory. `uv run --directory`
+  starts the server in the repository, so `logs/fortigate_mcp.log` lands there; with
+  any other launcher, use an absolute path or leave the key out. Console logging goes
+  to stderr and never interferes with the stdio protocol.
 - `username`/`password` are accepted as a fallback, but an API token is the supported
   path.
+- The configuration is read at startup. Restart the server (or reconnect it in the
+  client) after every change.
 
-## Run
+### 5. Check the server
 
-### Claude Code
+The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) starts the server
+the same way a client does and lets you call tools from a browser:
+
+```bash
+npx @modelcontextprotocol/inspector \
+  -e FORTIGATE_MCP_CONFIG="$PWD/config/config.json" \
+  -- uv run --directory "$PWD" fortigate-mcp-server
+```
+
+Click **Connect**, open **Tools**, run `list_devices`, then `test_device_connection` with
+one of your device IDs. The stdio server lists 137 tools.
+
+### 6. Connect your MCP client
+
+In every example, replace `/absolute/path/fortigate-mcp` with the path printed by `pwd`
+in step 2.
+
+#### Claude Code
 
 ```bash
 claude mcp add fortigate -s user \
   -e FORTIGATE_MCP_CONFIG=/absolute/path/fortigate-mcp/config/config.json \
-  -- uv run --directory /absolute/path/fortigate-mcp python -m src.fortigate_mcp.server
+  -- uv run --directory /absolute/path/fortigate-mcp fortigate-mcp-server
+claude mcp list
 ```
 
-Check with `claude mcp list`, then restart Claude Code. A `.mcp.json` example for
-project scope is in `examples/claude_code_mcp.json`.
+`-s user` makes the server available in every project; `-s project` writes it to the
+project's `.mcp.json` instead (`examples/claude_code_mcp.json` shows that format). Only
+the config path goes into `.mcp.json`; the tokens stay in `config/config.json`. Start a
+new Claude Code session and run `/mcp` to see the server and its tools.
 
-### Claude Desktop, Cursor
+To use a running HTTP server (see [HTTP transport](#http-transport)) instead:
 
-`examples/claude_desktop_config.stdio.json` and `examples/cursor_mcp_config.json`
-contain ready-to-edit entries. The stdio server needs `FORTIGATE_MCP_CONFIG` in its
-environment or `--config` on the command line.
+```bash
+claude mcp add --transport http fortigate http://127.0.0.1:8814/fortigate-mcp
+# with auth.require_auth = true
+claude mcp add --transport http fortigate http://127.0.0.1:8814/fortigate-mcp \
+  --header "Authorization: Bearer <http-token>"
+```
+
+#### Claude Desktop
+
+Open Settings > Developer > Edit Config, or edit the file directly:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "fortigate": {
+      "command": "/absolute/path/to/uv",
+      "args": ["run", "--directory", "/absolute/path/fortigate-mcp", "fortigate-mcp-server"],
+      "env": {
+        "FORTIGATE_MCP_CONFIG": "/absolute/path/fortigate-mcp/config/config.json"
+      }
+    }
+  }
+}
+```
+
+- Claude Desktop does not read your shell `PATH`, so give the full path of `uv`
+  (`which uv`, for example `/opt/homebrew/bin/uv` or `~/.local/bin/uv` written out in
+  full; on Windows `where uv`).
+- On Windows, write paths with forward slashes or doubled backslashes
+  (`C:\\Users\\me\\fortigate-mcp`).
+- Quit Claude Desktop completely before editing the file and start it again afterwards;
+  the app can rewrite the file while it runs. The server then shows up in the tools
+  menu of a new chat.
+- For the HTTP transport, `examples/claude_desktop_config.http.json` bridges to the URL
+  with `mcp-remote` (needs Node.js).
+
+#### Cursor
+
+Add the server to `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one
+project), then check Cursor Settings > MCP:
+
+```json
+{
+  "mcpServers": {
+    "fortigate": {
+      "command": "uv",
+      "args": ["run", "--directory", "/absolute/path/fortigate-mcp", "fortigate-mcp-server"],
+      "env": {
+        "FORTIGATE_MCP_CONFIG": "/absolute/path/fortigate-mcp/config/config.json"
+      }
+    }
+  }
+}
+```
+
+For a running HTTP server, use `"url": "http://127.0.0.1:8814/fortigate-mcp"` instead of
+`command`/`args`/`env`; `examples/cursor_mcp_config.json` shows both forms.
+
+#### Other clients
+
+- stdio: command `uv`, arguments `run --directory /absolute/path/fortigate-mcp
+  fortigate-mcp-server`, environment `FORTIGATE_MCP_CONFIG=/absolute/path/fortigate-mcp/config/config.json`
+  (or `--config <path>` as an argument instead of the variable).
+- Streamable HTTP: `http://127.0.0.1:8814/fortigate-mcp`, with an
+  `Authorization: Bearer <token>` header when `auth.require_auth` is on.
+
+`python -m src.fortigate_mcp.server` is equivalent to the `fortigate-mcp-server`
+command and is what the files in `examples/` use.
+
+### 7. First requests and enabling writes
+
+Ask the assistant, for example:
+
+- "List my FortiGate devices and test the connection to fgt-hq."
+- "Show the firewall policies on fgt-hq that allow traffic to the internet."
+
+When you want the assistant to change configuration:
+
+1. Give the API user a profile with write access (step 3).
+2. Set `"allow_writes": true` in `config/config.json` and restart the server.
+3. Ask for a backup first ("Save a config backup of fgt-hq"), then for the change.
+4. Set `allow_writes` back to `false` when you are done.
 
 ### HTTP transport
+
+The HTTP transport serves several clients from one long-running process:
 
 ```bash
 ./start_http_server.sh
@@ -165,18 +381,51 @@ uv run python -m src.fortigate_mcp.server_http \
   --host 127.0.0.1 --port 8814 --path /fortigate-mcp --config config/config.json
 ```
 
-The MCP endpoint is `http://127.0.0.1:8814/fortigate-mcp`; `GET /health` answers
-without a token. Bind to anything other than `127.0.0.1` only after setting
-`auth.require_auth` to `true` and listing bearer tokens under `auth.api_tokens`.
-`HTTP_MCP_GUIDE.md` covers the HTTP mode in detail.
+`start_http_server.sh` reads `MCP_HTTP_HOST`, `MCP_HTTP_PORT`, `MCP_HTTP_PATH` and
+`FORTIGATE_MCP_CONFIG`, and uses `.venv` when it exists. Check it with:
+
+```bash
+curl http://127.0.0.1:8814/health        # {"status":"healthy"}
+```
+
+The MCP endpoint is `http://127.0.0.1:8814/fortigate-mcp` and lists 138 tools.
+`GET /health` answers without a token. Before binding to anything other than
+`127.0.0.1`, turn on bearer-token authentication:
+
+```json
+"auth": {
+  "require_auth": true,
+  "api_tokens": ["<output of: openssl rand -hex 32>"]
+}
+```
+
+Clients then send `Authorization: Bearer <token>`. Put a TLS reverse proxy in front of
+the server if clients connect over the network. `HTTP_MCP_GUIDE.md` covers the HTTP
+mode in more detail.
 
 ### Docker
 
 ```bash
-docker-compose up -d
+cp config/config.example.json config/config.json    # edit it as in step 4
+docker compose up -d --build
+docker compose logs -f
+curl http://127.0.0.1:8814/health
 ```
 
-The compose file publishes the port on the loopback interface only.
+The container runs the HTTP transport on port 8814, published on the loopback interface
+only. `config/config.json` is mounted read-only and logs are written to `./logs`. Connect
+clients to `http://127.0.0.1:8814/fortigate-mcp` as described in step 6. The FortiGate
+addresses in the configuration must be reachable from the container.
+
+### Updating
+
+```bash
+cd /absolute/path/fortigate-mcp
+git pull
+uv sync --locked
+```
+
+Then restart the MCP client, or run `docker compose up -d --build` for the container.
 
 ## Safety model
 
@@ -343,6 +592,19 @@ tests/                 pytest suite, respx-based API tests, golden tool schemas
 
 - `FORTIGATE_MCP_CONFIG environment variable must be set`: pass `-e` in
   `claude mcp add` or `--config` on the command line.
+- `uv sync` tries to build `pydantic-core` and fails: uv picked Python 3.14. Run
+  `uv sync --locked --python 3.12`.
+- Claude Desktop shows the server as failed or disconnected right after start: the
+  `command` is not found. Use the full path of `uv`, and check the app's MCP log
+  (macOS: `~/Library/Logs/Claude/mcp-server-fortigate.log`).
+- Tools do not appear after a config change: restart the server or the client; the
+  configuration is read only at startup.
+- `CERTIFICATE_VERIFY_FAILED`: the FortiGate certificate is not trusted on the machine
+  running the server. Install a trusted certificate on the FortiGate or add its CA to
+  the system trust store; see `verify_ssl` in step 4.
+- A `RuntimeWarning: 'src.fortigate_mcp.server' found in sys.modules` line when the
+  server is started with `python -m`: harmless; the `fortigate-mcp-server` command does
+  not print it.
 - `Authentication failed` / HTTP 401: wrong token, or the request comes from an
   address outside the API user's trusted hosts.
 - `Permission denied` / HTTP 403 on a single tool: the API user's admin profile lacks
